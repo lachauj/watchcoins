@@ -4,15 +4,46 @@
 ## improved by lenormf
 ##
 
-MULTIPOOL_USER=""
+## Example address
+## Change it with your own !
+MULTIPOOL_USER="1KotnoAdpv8GGmqGcA6TmtM7S5M16HGqio"
+
+## Do not modify anything below this line unless you know what you're doing
 MARKET_CACHE=$(mktemp)
+
+# underline
+u=$(tput smul)
+u_=$(tput rmul)
+# red
+r=$(tput setaf 1)
+# green
+g=$(tput setaf 2)
+# color reset
+nc=$(tput sgr0)
 
 function fatal {
 	echo "$@" && exit 1
 }
 
 function calc {
-	echo "$@" | bc
+	echo "$@" | bc | sed -r "s/^\.([0-9]+)/0\.\1/g"
+}
+
+function print_fmt {
+	local fmt="$1"
+
+	shift
+	if [ -z "$fmt" ]; then
+		echo -n "$@"
+	elif [ "$fmt" = u ]; then
+		echo -ne "$u"
+		echo -n "$@"
+		echo -ne "$u_"
+	else
+		eval echo -ne "\$${fmt}"
+		echo -n "$@"
+		echo -ne "$nc"
+	fi
 }
 
 function table_row {
@@ -21,16 +52,25 @@ function table_row {
 
 	shift
 	local lw=5
+	local lf=""
 	local n=0
 	for i in "$@"; do
 		test $n -lt ${#fmt[@]} -a ${#fmt[@]} -gt 0 && lw="${fmt[$n]}"
 
+		# Modify to allow format modifiers
+		[[ "${lw:0:1}" =~ [urg] ]] && {
+			lf="${lw:0:1}";
+			lw="${lw:1}";
+		} || {
+			test $n -lt ${#fmt[@]} -a ${#fmt[@]} -gt 0 && lf="";
+		}
+
 		test "$n" -gt 0 -a "$n" -lt $# && echo -n " $sep "
 		if [ "${#i}" -ge "$lw" ]; then
-			echo -ne "${i:0:$lw}"
+			print_fmt "$lf" "${i:0:$lw}"
 		else
 			printf "%$((lw - ${#i}))s" " "
-			echo -ne "$i"
+			print_fmt "$lf" "$i"
 		fi
 
 		n=$((n + 1))
@@ -40,9 +80,10 @@ function table_row {
 }
 
 function get_multipool_info {
+	local multipool_user="$1"
 	local multipool_addr="http://www.middlecoin.com/allusers.html"
 
-	curl -s "$multipool_addr" | grep -A 6 "id=\"${MULTIPOOL_USER}" | sed -r "s/><\/td>/>0.0<\/td>/g" | sed -r "s/(<[^>]+>)|\s//g"
+	curl -s "$multipool_addr" | grep -m 1 -A 6 "id=\"${multipool_user}" | sed -r "s/[^a]><\//>0.0<\//g" | sed -r "s/(<[^>]+>)|\s//g"
 }
 
 function display_user_stats {
@@ -67,7 +108,7 @@ function display_user_stats {
 	local balance_sum_usd=$(calc "$balance_sum_btc * $rate_bitcoin_dollars")
 	local paid_out_usd=$(calc "$paid_out_btc * $rate_bitcoin_dollars")
 
-	local immature_unexchanged_balance_sbc=$(calc "$immature_unexchanged_balance_usd / $rate_stablecoin_dollars")
+	local immature_unexchanged_balance_sbc=$(calc $immature_unexchanged_balance_usd / $rate_stablecoin_dollars)
 	local unexchanged_balance_sbc=$(calc $unexchanged_balance_usd / $rate_stablecoin_dollars)
 	local balance_sbc=$(calc $balance_usd / $rate_stablecoin_dollars)
 	local balance_sum_sbc=$(calc $balance_sum_usd / $rate_stablecoin_dollars)
@@ -77,12 +118,15 @@ function display_user_stats {
 	table_row "$table_fmt" "User" "$user"
 	echo
 
-	table_fmt=22:15:15:11
+	table_fmt=22:u15:u15
 	table_row "$table_fmt" "" "Accepted" "Rejected"
+	table_fmt=22:15:15
 	table_row "$table_fmt" "Hashrate" "${hashrate_accepted_mhs} Mh/s" "${hashrate_rejected_mhs} Mh/s"
 	echo
 
-	table_row "$table_fmt" "Balance type/Currency" "Bitcoin" "USD" "StableCoin"
+	table_fmt=22:u15:u15:u11
+	table_row "$table_fmt" "" "Bitcoin" "USD" "StableCoin"
+	table_fmt=22:15:15:11
 	table_row "$table_fmt" "Immature Unexchanged" "${immature_unexchanged_balance_btc} btc" "\$${immature_unexchanged_balance_usd}" "${immature_unexchanged_balance_sbc} sbc"
 	table_row "$table_fmt" "Unexchanged" "${unexchanged_balance_btc} btc" "\$${unexchanged_balance_usd}" "${unexchanged_balance_sbc} sbc"
 	table_row "$table_fmt" "Regular" "${balance_btc} btc" "\$${balance_usd}" "${balance_sbc} sbc"
@@ -110,13 +154,14 @@ function display_currency_stats {
 	local volume_last_24_percent="$5"
 	local change_last_24_percent="$6"
 
-	table_fmt=22:15:15:15:12
-	table_row "$table_fmt" "Currency Name" "Market Cap" "Exchange Rate" "Maximum Supply" "Volume 24h" "Change 24h"
+	table_fmt=22:u15:u15:u15:u12
+	table_row "$table_fmt" "" "Market Cap" "Exchange Rate" "Maximum Supply" "Volume 24h" "Change 24h"
+	test "${change_last_24_percent:0:1}" = - && table_fmt=22:15:15:15:12:r12 || table_fmt=22:15:15:15:12:g12
 	table_row "$table_fmt" "${name}" "${market_cap_dollars}" "${exchange_rate_dollars}" "${maximum_supply_coins}" "${volume_last_24_percent}" "${change_last_24_percent}"
 }
 
 function main {
-	local multipool_info=( $(get_multipool_info) )
+	local multipool_info=( $(get_multipool_info "${MULTIPOOL_USER}") )
 	local bitcoin_info=( $(get_currency_stats Bitcoin) )
 	local stablecoin_info=( $(get_currency_stats StableCoin) )
 
