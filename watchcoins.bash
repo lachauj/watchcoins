@@ -8,6 +8,9 @@
 ## Change it with your own !
 MULTIPOOL_USER="1KotnoAdpv8GGmqGcA6TmtM7S5M16HGqio"
 
+## Time to refresh the informations (seconds)
+REFRESH_TIME=30 
+
 ## Do not modify anything below this line unless you know what you're doing
 MARKET_CACHE=$(mktemp)
 
@@ -169,6 +172,8 @@ function main {
 	test 0 -eq "${#bitcoin_info[@]}" && fatal "Unable to get info from the market (bitcoin)"
 	test 0 -eq "${#stablecoin_info[@]}" && fatal "Unable to get info from the market (stablecoin)"
 
+	clear;
+
 	display_user_stats "${multipool_info[@]}" "${bitcoin_info[@]}" "${stablecoin_info[@]}"
 	display_currency_stats "${bitcoin_info[@]}"
 	echo
@@ -178,4 +183,4 @@ function main {
 	rm -f "$MARKET_CACHE"
 }
 
-main "$@"
+clear; while [ true ]; do main "$@"; sleep $REFRESH_TIME; done
